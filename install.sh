@@ -41,6 +41,7 @@ if [[ "$PLATFORM" == "linux" ]]; then
     warn "Не хватает пакетов: ${MISSING[*]}"
     if command -v apt-get &>/dev/null; then
       info "Устанавливаю через apt-get..."
+      sudo apt-get update -qq
       sudo apt-get install -y "${MISSING[@]}"
     else
       error "Установи вручную: ${MISSING[*]}"
