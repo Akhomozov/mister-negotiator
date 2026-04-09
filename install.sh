@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Mr. Negotiator — установщик
-# Использование: curl -fsSL https://raw.githubusercontent.com/USER/mister-negotiator/main/install.sh | bash
+# Использование: curl -fsSL https://raw.githubusercontent.com/Akhomozov/mister-negotiator/main/install.sh | bash
 
 set -euo pipefail
 
