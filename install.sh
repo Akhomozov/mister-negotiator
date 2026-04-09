@@ -7,6 +7,7 @@ set -euo pipefail
 REPO_URL="https://github.com/Akhomozov/mister-negotiator"
 INSTALL_DIR="$HOME/.mister-negotiator"
 PYTHON_MIN="3.10"
+no_proxy_val=""
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 info()    { echo -e "${GREEN}[mr-neg]${NC} $*"; }
@@ -79,6 +80,7 @@ ENV_FILE="$INSTALL_DIR/.env"
 
 if [[ -f "$ENV_FILE" ]]; then
   warn ".env уже существует. Пропускаю конфигурацию (удали $ENV_FILE чтобы перенастроить)."
+  no_proxy_val="$(grep -m1 '^NO_PROXY=' "$ENV_FILE" | cut -d= -f2- || true)"
 else
   echo ""
   info "Настройка LLM-подключения:"
@@ -88,11 +90,13 @@ else
   read -rp "  LLM_TOKEN (API токен): " llm_token
   read -rp "  LLM_MODEL [Qwen/Qwen3-Coder-Next-FP8]: " llm_model
   llm_model="${llm_model:-Qwen/Qwen3-Coder-Next-FP8}"
+  read -rp "  NO_PROXY (адреса без прокси, например: localhost,10.0.0.0/8; или Enter чтобы пропустить): " no_proxy_val
 
   cat > "$ENV_FILE" <<EOF
 LLM_URL=${llm_url}
 LLM_TOKEN=${llm_token}
 LLM_MODEL=${llm_model}
+NO_PROXY=${no_proxy_val}
 EOF
   info ".env создан"
 fi
@@ -105,11 +109,16 @@ if [[ "$PLATFORM" == "linux" ]]; then
   AUTOSTART_DIR="$HOME/.config/autostart"
   DESKTOP_FILE="$AUTOSTART_DIR/mister-negotiator.desktop"
   mkdir -p "$AUTOSTART_DIR"
+  if [[ -n "$no_proxy_val" ]]; then
+    EXEC_LINE="env NO_PROXY=$no_proxy_val $PYTHON_BIN $MAIN_PY"
+  else
+    EXEC_LINE="$PYTHON_BIN $MAIN_PY"
+  fi
   cat > "$DESKTOP_FILE" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Mr. Negotiator
-Exec=$PYTHON_BIN $MAIN_PY
+Exec=${EXEC_LINE}
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true
@@ -121,7 +130,20 @@ if [[ "$PLATFORM" == "mac" ]]; then
   PLIST_DIR="$HOME/Library/LaunchAgents"
   PLIST_FILE="$PLIST_DIR/com.mister-negotiator.plist"
   mkdir -p "$PLIST_DIR"
-  cat > "$PLIST_FILE" <<EOF
+
+  # Формируем блок EnvironmentVariables, если NO_PROXY задан
+  if [[ -n "$no_proxy_val" ]]; then
+    ENV_VARS_BLOCK="  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NO_PROXY</key>
+    <string>${no_proxy_val}</string>
+  </dict>"
+  else
+    ENV_VARS_BLOCK=""
+  fi
+
+  {
+    cat <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -133,6 +155,9 @@ if [[ "$PLATFORM" == "mac" ]]; then
     <string>${PYTHON_BIN}</string>
     <string>${MAIN_PY}</string>
   </array>
+EOF
+    [[ -n "$no_proxy_val" ]] && printf '%s\n' "$ENV_VARS_BLOCK"
+    cat <<EOF
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -144,6 +169,7 @@ if [[ "$PLATFORM" == "mac" ]]; then
 </dict>
 </plist>
 EOF
+  } > "$PLIST_FILE"
   launchctl unload "$PLIST_FILE" 2>/dev/null || true
   launchctl load "$PLIST_FILE"
   info "LaunchAgent настроен и запущен: $PLIST_FILE"
